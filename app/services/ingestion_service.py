@@ -1,14 +1,24 @@
 import logging
 import requests
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from app.core.config import settings
-from app.db.models import Product
+from app.db.models import Product, ProductTag, ProductImage, Review
 from app.elasticsearch.client import es_client
 from app.elasticsearch.index_manager import create_products_index
 
 logger = logging.getLogger(__name__)
 
+def parse_iso_datetime(date_str: str) -> datetime | None:
+    if not date_str:
+        return None
+    try:
+        # Handling the Z suffix common in JSON (e.g. from dummyjson)
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning(f"Could not parse date string: {date_str}")
+        return None
 
 class IngestionService:
     @staticmethod
@@ -37,6 +47,7 @@ class IngestionService:
 
         db_products = []
         for item in products:
+            # Build Product
             product = Product(
                 id=item["id"],
                 title=item.get("title", ""),
@@ -49,7 +60,47 @@ class IngestionService:
                 rating=item.get("rating"),
                 stock=item.get("stock"),
                 thumbnail=item.get("thumbnail"),
+                weight=item.get("weight"),
+                warranty_information=item.get("warrantyInformation"),
+                shipping_information=item.get("shippingInformation"),
+                availability_status=item.get("availabilityStatus"),
+                return_policy=item.get("returnPolicy"),
+                minimum_order_quantity=item.get("minimumOrderQuantity"),
             )
+
+            # Dimensions
+            dimensions = item.get("dimensions", {})
+            if dimensions:
+                product.dimension_width = dimensions.get("width")
+                product.dimension_height = dimensions.get("height")
+                product.dimension_depth = dimensions.get("depth")
+
+            # Meta
+            meta_data = item.get("meta", {})
+            if meta_data:
+                product.meta_created_at = parse_iso_datetime(meta_data.get("createdAt"))
+                product.meta_updated_at = parse_iso_datetime(meta_data.get("updatedAt"))
+                product.meta_barcode = meta_data.get("barcode")
+                product.meta_qr_code = meta_data.get("qrCode")
+
+            # Tags
+            for t in item.get("tags", []):
+                product.tags.append(ProductTag(tag=t))
+
+            # Images
+            for i, img_url in enumerate(item.get("images", [])):
+                product.images.append(ProductImage(image_url=img_url, position=i))
+
+            # Reviews
+            for rev in item.get("reviews", []):
+                product.reviews.append(Review(
+                    rating=rev.get("rating", 0),
+                    comment=rev.get("comment"),
+                    reviewer_name=rev.get("reviewerName"),
+                    reviewer_email=rev.get("reviewerEmail"),
+                    review_date=parse_iso_datetime(rev.get("date"))
+                ))
+
             db_products.append(product)
 
         db.add_all(db_products)
@@ -62,6 +113,8 @@ class IngestionService:
     def index_documents(products: list[dict]) -> None:
         actions = []
         for item in products:
+            # We index exactly as provided by the DummyJSON schema, adapting property names if necessary,
+            # or we can push it straightforwardly. Let's align it with out to_dict keys if needed.
             doc = {
                 "id": item["id"],
                 "title": item.get("title", ""),
@@ -74,6 +127,17 @@ class IngestionService:
                 "rating": item.get("rating"),
                 "stock": item.get("stock"),
                 "thumbnail": item.get("thumbnail"),
+                "weight": item.get("weight"),
+                "warranty_information": item.get("warrantyInformation"),
+                "shipping_information": item.get("shippingInformation"),
+                "availability_status": item.get("availabilityStatus"),
+                "return_policy": item.get("returnPolicy"),
+                "minimum_order_quantity": item.get("minimumOrderQuantity"),
+                "dimensions": item.get("dimensions", {}),
+                "meta": item.get("meta", {}),
+                "tags": item.get("tags", []),
+                "images": item.get("images", []),
+                "reviews": item.get("reviews", [])
             }
             actions.append({"index": {"_index": settings.ELASTICSEARCH_INDEX, "_id": item["id"]}})
             actions.append(doc)
@@ -85,6 +149,7 @@ class IngestionService:
     @staticmethod
     def index_all_from_db(db: Session) -> None:
         products = db.scalars(select(Product)).all()
+        # to_dict returns exactly the formatted document
         payload = [p.to_dict() for p in products]
 
         actions = []

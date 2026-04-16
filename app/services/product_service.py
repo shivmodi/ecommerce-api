@@ -14,11 +14,11 @@ class ProductService:
         return list(db.scalars(stmt).all())
 
     @staticmethod
-    def get_product_by_id(db: Session, product_id: int) -> Product:
+    def get_product_by_id(db: Session, product_id: int) -> dict:
         product = db.get(Product, product_id)
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
-        return product
+        return product.to_dict()
 
     @staticmethod
     def get_products(
@@ -51,7 +51,7 @@ class ProductService:
         items = db.scalars(base_stmt.order_by(ordering).offset(offset).limit(size)).all()
         total = db.scalar(count_stmt) or 0
 
-        return {"total": total, "page": page, "size": size, "items": items}
+        return {"total": total, "page": page, "size": size, "items": [item.to_dict() for item in items]}
 
     @staticmethod
     def search_products(
