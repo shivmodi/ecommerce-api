@@ -1,0 +1,21 @@
+# Elasticsearch Synonym Rules
+# Format: word1, word2, word3  (all treated as equivalent during search)
+# Add new lines here to add new synonyms — no code changes needed!
+
+# Beauty & Fragrance
+perfume, fragrance
+lipstick, lip color, lip stick
+
+# Electronics
+laptop, notebook
+phone, smartphone, mobile, cell phone
+tv, television, smart tv
+headphone, earphone, earbuds
+
+# Footwear
+sneakers, trainers, athletic shoes, sports shoes
+sandals, flip flops, slippers
+
+# Clothing
+t-shirt, tshirt, tee
+trousers, pants

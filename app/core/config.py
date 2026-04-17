@@ -19,8 +19,15 @@ class Settings(BaseSettings):
     ELASTICSEARCH_HOST: str
     ELASTICSEARCH_PORT: int
     ELASTICSEARCH_INDEX: str = "products"
+    
+    REDIS_HOST: str = "redis"
+    REDIS_PORT: int = 6379
 
     DUMMY_PRODUCTS_URL: str = "https://dummyjson.com/products?limit=200"
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
     @property
     def database_url(self) -> str:

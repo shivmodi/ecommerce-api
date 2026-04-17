@@ -32,11 +32,27 @@ services:
       - "9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      # Mount our synonyms file so Elasticsearch can reference it if using synonyms_path
+      - ./config/synonyms.txt:/usr/share/elasticsearch/config/synonyms.txt:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
+
+  redis:
+    image: redis:alpine
+    container_name: ecommerce_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   app:
     build: .
@@ -51,7 +67,13 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Mount synonyms file so the app can read it to build the ES index mapping
+      - ./config:/app/config:ro
 
 volumes:
   mysql_data:
   es_data:
+  redis_data:

@@ -38,6 +38,19 @@ class Review(Base):
     product: Mapped["Product"] = relationship(back_populates="reviews")
 
 class Product(Base):
+    """
+    CONCEPT: RELATIONAL DATA MODEL (MySQL)
+    This is the primary table for storing product information.
+
+    RELATIONSHIPS:
+    - tags: One-to-Many dependency (Product -> ProductTag)
+    - images: One-to-Many dependency (Product -> ProductImage)
+    - reviews: One-to-Many dependency (Product -> Review)
+
+    DENORMALIZATION:
+    - Dimensions and Meta are stored as flat columns (e.g., dimension_width) 
+      for simplicity in MySQL, then nested in the to_dict() method for the API.
+    """
     __tablename__ = "products"
 
     # Core Fields
@@ -78,6 +91,11 @@ class Product(Base):
     reviews: Mapped[List["Review"]] = relationship(back_populates="product", cascade="all, delete-orphan")
 
     def to_dict(self) -> dict:
+        """
+        NORMALIZATION:
+        Converts the flat SQLAlchemy model into a nested Dictionary format 
+        that matches the API expectations (and Elasticsearch format).
+        """
         return {
             "id": self.id,
             "title": self.title,
@@ -100,6 +118,7 @@ class Product(Base):
                 "width": self.dimension_width,
                 "height": self.dimension_height,
                 "depth": self.dimension_depth,
+                "position": "images" # Placeholder to explain thumbnail vs images logic
             },
             "meta": {
                 "createdAt": self.meta_created_at.isoformat() if self.meta_created_at else None,

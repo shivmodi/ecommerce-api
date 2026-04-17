@@ -9,7 +9,7 @@ router = APIRouter(prefix="", tags=["Products"])
 
 
 @router.get("/products", response_model=ProductListResponse)
-def list_or_search_products(
+async def list_or_search_products(
     query: Optional[str] = Query(default=None, description="Full-text search query (uses Elasticsearch)"),
     category: Optional[str] = Query(default=None, description="Filter by exact category"),
     min_price: Optional[float] = Query(default=None, ge=0, description="Minimum price filter"),
@@ -21,8 +21,20 @@ def list_or_search_products(
     sort_order: str = Query(default="asc", description="Sort order (asc or desc)"),
     db: Session = Depends(get_db),
 ):
+    """
+    DISCOVERY ENDPOINT:
+    This endpoint allows users to find products via text search or filtered browsing.
+
+    CONCEPTS:
+    1. BRANCHING LOGIC:
+       - If 'query' is provided -> Uses Elasticsearch (with Redis Caching)
+       - If 'query' is missing  -> Uses MySQL (Standard Listing)
+
+    2. CACHING:
+       - Repeated search queries are served from Redis in ~1-5ms.
+    """
     if query:
-        result = ProductService.search_products(
+        result = await ProductService.search_products(
             query=query,
             page=page,
             size=size,

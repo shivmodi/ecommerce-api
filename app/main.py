@@ -15,6 +15,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    APPLICATION LIFECYCLE:
+    This context manager runs code during startup and shutdown.
+
+    CONCEPTS:
+    1. DATABASE INITIALIZATION:
+       - metadata.create_all: Checks if MySQL tables exist; creates them if not.
+    
+    2. DATA BOOTSTRAPPING:
+       - IngestionService.bootstrap_data: 
+         - Checks if data exists in the DB.
+         - If empty, it fetches 194 products from the source API.
+         - Syncs the data to both MySQL and Elasticsearch.
+    """
     logger.info("Creating database tables...")
     Base.metadata.create_all(bind=engine)
 
