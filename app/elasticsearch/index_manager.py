@@ -15,9 +15,23 @@ def create_products_index() -> None:
     mapping = {
         "settings": {
             "analysis": {
+                "filter": {
+                    "synonym_filter": {
+                        "type": "synonym",
+                        "synonyms": [
+                            "perfume, fragrance",
+                            "lipstick, lip color",
+                            "sneakers, trainers, athletic shoes",
+                            "laptop, notebook",
+                            "phone, smartphone, mobile",
+                        ]
+                    }
+                },
                 "analyzer": {
-                    "default": {
-                        "type": "standard"
+                    "synonym_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "standard",
+                        "filter": ["lowercase", "synonym_filter"]
                     }
                 }
             }
@@ -25,8 +39,15 @@ def create_products_index() -> None:
         "mappings": {
             "properties": {
                 "id": {"type": "integer"},
-                "title": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                "description": {"type": "text"},
+                "title": {
+                    "type": "text",
+                    "analyzer": "synonym_analyzer",
+                    "fields": {"keyword": {"type": "keyword"}}
+                },
+                "description": {
+                    "type": "text",
+                    "analyzer": "synonym_analyzer"
+                },
                 "category": {"type": "keyword"},
                 "brand": {"type": "keyword"},
                 "sku": {"type": "keyword"},
@@ -73,4 +94,4 @@ def create_products_index() -> None:
     }
 
     es_client.indices.create(index=index_name, body=mapping)
-    logger.info("Created Elasticsearch index '%s' with nested mappings", index_name)
+    logger.info("Created Elasticsearch index '%s' with synonym analyzer and nested mappings", index_name)

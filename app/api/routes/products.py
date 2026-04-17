@@ -10,12 +10,15 @@ router = APIRouter(prefix="", tags=["Products"])
 
 @router.get("/products", response_model=ProductListResponse)
 def list_or_search_products(
-    query: Optional[str] = Query(default=None, description="Full-text search query"),
-    category: Optional[str] = Query(default=None, description="Category filter"),
+    query: Optional[str] = Query(default=None, description="Full-text search query (uses Elasticsearch)"),
+    category: Optional[str] = Query(default=None, description="Filter by exact category"),
+    min_price: Optional[float] = Query(default=None, ge=0, description="Minimum price filter"),
+    max_price: Optional[float] = Query(default=None, ge=0, description="Maximum price filter"),
+    min_rating: Optional[float] = Query(default=None, ge=0, le=5, description="Minimum rating filter"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=10, ge=1, le=100),
-    sort_by: str = Query(default="id"),
-    sort_order: str = Query(default="asc"),
+    sort_by: str = Query(default="id", description="Sort field (id, price, title, rating, stock)"),
+    sort_order: str = Query(default="asc", description="Sort order (asc or desc)"),
     db: Session = Depends(get_db),
 ):
     if query:
@@ -24,6 +27,9 @@ def list_or_search_products(
             page=page,
             size=size,
             category=category,
+            min_price=min_price,
+            max_price=max_price,
+            min_rating=min_rating,
         )
         return result
 

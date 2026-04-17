@@ -59,22 +59,36 @@ class ProductService:
         page: int = 1,
         size: int = 10,
         category: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        min_rating: Optional[float] = None,
     ):
         from_ = (page - 1) * size
 
+        # Build the must clause with boosted multi_match
         must_clause = [
             {
                 "multi_match": {
                     "query": query,
-                    "fields": ["title^3", "description^2", "brand", "category"],
+                    "fields": ["title^3", "description^2", "brand^2", "tags", "category"],
                     "fuzziness": "AUTO",
                 }
             }
         ]
 
+        # Build filter clauses dynamically
         filter_clause = []
         if category:
             filter_clause.append({"term": {"category": category}})
+        if min_price is not None or max_price is not None:
+            price_range = {}
+            if min_price is not None:
+                price_range["gte"] = min_price
+            if max_price is not None:
+                price_range["lte"] = max_price
+            filter_clause.append({"range": {"price": price_range}})
+        if min_rating is not None:
+            filter_clause.append({"range": {"rating": {"gte": min_rating}}})
 
         body = {
             "from": from_,
@@ -87,15 +101,42 @@ class ProductService:
             },
             "sort": [
                 {"_score": {"order": "desc"}},
-                {"id": {"order": "asc"}}
+                {"rating": {"order": "desc", "missing": "_last"}},
             ],
+            # Aggregations for faceted search
+            "aggs": {
+                "categories": {
+                    "terms": {"field": "category", "size": 20}
+                },
+                "brands": {
+                    "terms": {"field": "brand", "size": 20}
+                },
+            },
         }
 
         response = es_client.search(index=settings.ELASTICSEARCH_INDEX, body=body)
 
         hits = response["hits"]["hits"]
         total = response["hits"]["total"]["value"]
-
         items = [hit["_source"] for hit in hits]
 
-        return {"total": total, "page": page, "size": size, "items": items}
+        # Extract aggregation buckets
+        aggs_raw = response.get("aggregations", {})
+        aggregations = {
+            "categories": [
+                {"key": b["key"], "doc_count": b["doc_count"]}
+                for b in aggs_raw.get("categories", {}).get("buckets", [])
+            ],
+            "brands": [
+                {"key": b["key"], "doc_count": b["doc_count"]}
+                for b in aggs_raw.get("brands", {}).get("buckets", [])
+            ],
+        }
+
+        return {
+            "total": total,
+            "page": page,
+            "size": size,
+            "items": items,
+            "aggregations": aggregations,
+        }

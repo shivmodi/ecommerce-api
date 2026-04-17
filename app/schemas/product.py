@@ -47,11 +47,20 @@ class ProductResponse(BaseModel):
     images: List[str] = []
     reviews: List[ReviewSchema] = []
 
+class AggregationBucket(BaseModel):
+    key: str
+    doc_count: int
+
+class AggregationsSchema(BaseModel):
+    categories: List[AggregationBucket] = []
+    brands: List[AggregationBucket] = []
+
 class ProductListResponse(BaseModel):
     total: int
     page: int
     size: int
     items: List[ProductResponse]
+    aggregations: Optional[AggregationsSchema] = None
 
 class CategoryListResponse(BaseModel):
     categories: List[str]

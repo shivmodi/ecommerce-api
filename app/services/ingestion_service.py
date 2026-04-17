@@ -23,11 +23,42 @@ def parse_iso_datetime(date_str: str) -> datetime | None:
 class IngestionService:
     @staticmethod
     def fetch_products_from_source() -> list[dict]:
-        logger.info("Fetching products from external source: %s", settings.DUMMY_PRODUCTS_URL)
-        response = requests.get(settings.DUMMY_PRODUCTS_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("products", [])
+        import time
+        all_products = []
+        limit = 100
+        skip = 0
+        base_url = settings.DUMMY_PRODUCTS_URL.split('?')[0]
+
+        while True:
+            url = f"{base_url}?limit={limit}&skip={skip}"
+            success = False
+            batch = []
+            
+            for attempt in range(3):
+                try:
+                    logger.info(f"Fetching batch from {url} (Attempt {attempt + 1}/3)")
+                    response = requests.get(url, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
+                    batch = data.get("products", [])
+                    success = True
+                    break
+                except requests.RequestException as e:
+                    logger.warning(f"Error fetching batch at skip {skip}: {e}. Retrying...")
+                    time.sleep(1)
+            
+            if success:
+                logger.info(f"Successfully fetched {len(batch)} products in this batch")
+                all_products.extend(batch)
+                if len(batch) < limit:
+                    break
+            else:
+                logger.error(f"Failed to fetch batch at skip {skip} after 3 attempts. Continuing.")
+            
+            skip += limit
+
+        logger.info(f"Total products fetched across all batches: {len(all_products)}")
+        return all_products
 
     @staticmethod
     def bootstrap_data(db: Session) -> None:
@@ -112,39 +143,67 @@ class IngestionService:
     @staticmethod
     def index_documents(products: list[dict]) -> None:
         actions = []
+        skipped = 0
         for item in products:
-            # We index exactly as provided by the DummyJSON schema, adapting property names if necessary,
-            # or we can push it straightforwardly. Let's align it with out to_dict keys if needed.
-            doc = {
-                "id": item["id"],
-                "title": item.get("title", ""),
-                "description": item.get("description", ""),
-                "category": item.get("category", ""),
-                "brand": item.get("brand"),
-                "sku": item.get("sku"),
-                "price": item.get("price", 0),
-                "discount_percentage": item.get("discountPercentage"),
-                "rating": item.get("rating"),
-                "stock": item.get("stock"),
-                "thumbnail": item.get("thumbnail"),
-                "weight": item.get("weight"),
-                "warranty_information": item.get("warrantyInformation"),
-                "shipping_information": item.get("shippingInformation"),
-                "availability_status": item.get("availabilityStatus"),
-                "return_policy": item.get("returnPolicy"),
-                "minimum_order_quantity": item.get("minimumOrderQuantity"),
-                "dimensions": item.get("dimensions", {}),
-                "meta": item.get("meta", {}),
-                "tags": item.get("tags", []),
-                "images": item.get("images", []),
-                "reviews": item.get("reviews", [])
-            }
-            actions.append({"index": {"_index": settings.ELASTICSEARCH_INDEX, "_id": item["id"]}})
-            actions.append(doc)
+            try:
+                # Safely extract nested objects with defaults for missing fields
+                dimensions = item.get("dimensions") or {}
+                meta = item.get("meta") or {}
+                tags = item.get("tags") or []
+                images = item.get("images") or []
+                reviews = item.get("reviews") or []
+
+                doc = {
+                    "id": item["id"],
+                    "title": item.get("title", ""),
+                    "description": item.get("description", ""),
+                    "category": item.get("category", ""),
+                    "brand": item.get("brand", ""),
+                    "sku": item.get("sku"),
+                    "price": item.get("price", 0),
+                    "discount_percentage": item.get("discountPercentage"),
+                    "rating": item.get("rating"),
+                    "stock": item.get("stock"),
+                    "thumbnail": item.get("thumbnail"),
+                    "weight": item.get("weight"),
+                    "warranty_information": item.get("warrantyInformation"),
+                    "shipping_information": item.get("shippingInformation"),
+                    "availability_status": item.get("availabilityStatus", "Unknown"),
+                    "return_policy": item.get("returnPolicy"),
+                    "minimum_order_quantity": item.get("minimumOrderQuantity"),
+                    "dimensions": {
+                        "width": dimensions.get("width"),
+                        "height": dimensions.get("height"),
+                        "depth": dimensions.get("depth"),
+                    },
+                    "meta": {
+                        "createdAt": meta.get("createdAt"),
+                        "updatedAt": meta.get("updatedAt"),
+                        "barcode": meta.get("barcode"),
+                        "qrCode": meta.get("qrCode"),
+                    },
+                    "tags": tags,
+                    "images": images,
+                    "reviews": [
+                        {
+                            "rating": r.get("rating", 0),
+                            "comment": r.get("comment", ""),
+                            "reviewerName": r.get("reviewerName", "Anonymous"),
+                            "reviewerEmail": r.get("reviewerEmail", ""),
+                            "date": r.get("date"),
+                        }
+                        for r in reviews
+                    ],
+                }
+                actions.append({"index": {"_index": settings.ELASTICSEARCH_INDEX, "_id": item["id"]}})
+                actions.append(doc)
+            except Exception as e:
+                skipped += 1
+                logger.warning("Skipping product id=%s during ES indexing: %s", item.get("id"), e)
 
         if actions:
             es_client.bulk(operations=actions, refresh=True)
-            logger.info("Indexed %s products into Elasticsearch", len(products))
+            logger.info("Indexed %s products into Elasticsearch (skipped %s)", len(products) - skipped, skipped)
 
     @staticmethod
     def index_all_from_db(db: Session) -> None:
