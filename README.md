@@ -46,6 +46,94 @@ This project is a high-performance e-commerce backend built with **FastAPI**, **
 ```bash
 docker-compose up --build -d
 ```
+## 🛠️ **Troubleshooting Docker Permissions Issue**
+
+If you encounter a **"Permission Denied"** error while trying to run Docker commands, follow these steps to resolve the issue.
+
+### **Issue**: "Permission Denied" error when running `docker ps` or `docker-compose up`.
+
+---
+
+### Step 1: **Add Your User to the Docker Group**
+
+Run the following command to add your user to the Docker group:
+
+```bash
+sudo usermod -aG docker $USER
+````
+
+* After running this command, **log out** and **log back in** to apply the group membership changes.
+* Alternatively, you can run:
+
+```bash
+newgrp docker
+```
+
+This will avoid logging out and apply the group changes in your current session.
+
+---
+
+### Step 2: **Verify Docker Access**
+
+After logging back in (or using `newgrp docker`), verify that Docker is accessible by running:
+
+```bash
+docker ps
+```
+
+This should list the running Docker containers without any permission errors.
+
+---
+
+### Step 3: **Restart Docker Service**
+
+If the issue persists, restart the Docker service with:
+
+```bash
+sudo systemctl restart docker
+```
+
+This will ensure that Docker picks up the changes to user permissions and settings.
+
+---
+
+### Step 4: **Check Docker Socket Permissions**
+
+Ensure that the Docker socket has the correct permissions. Run:
+
+```bash
+sudo chown root:docker /var/run/docker.sock
+sudo chmod 660 /var/run/docker.sock
+```
+
+This sets the appropriate read/write permissions for the Docker socket, allowing your user to interact with Docker.
+
+---
+
+### Step 5: **Re-run Docker Compose**
+
+Once the above steps are completed, try running the following to start your containers:
+
+```bash
+docker-compose up --build -d
+```
+
+---
+
+### ✅ **Accessing the Application**
+
+Once your Docker containers are running, you can access the application via:
+
+* **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+* **ReDoc UI**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+These links will take you to the interactive API documentation, where you can test the available endpoints.
+
+---
+
+### Conclusion
+
+By following these steps, you should be able to resolve the Docker permission issues and run the application locally without any problems. Let me know if you encounter any other issues!
 
 ### 🔌 Service Endpoints & Ports
 | Service | Port | Description |
