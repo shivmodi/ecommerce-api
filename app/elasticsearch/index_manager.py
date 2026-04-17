@@ -24,38 +24,33 @@ def _load_synonyms() -> list[str]:
     return synonyms
 def create_products_index() -> None:
     """
-    INITIAL USE:
-    Configures the Elasticsearch 'Products' index with advanced settings for scaling (Sharding)
-    and improved search quality (Synonyms/Analyzers).
+    ### 🧱 ELASTICSEARCH INDEX ORCHESTRATION
+    Configures the 'Products' index with advanced scaling and search logic.
 
-    CONCEPTS:
-    1. SHARDING (Scalability):
-       - number_of_shards: 3. The index is split into 3 parts.
-       - Logic: hash(id) % 3 determines which shard a product goes to.
-       - Why: Allows searching in parallel across multiple servers.
+    **WHY**: Default indices are not optimized for e-commerce. We need specific 
+             settings for **Typo Tolerance**, **Synonyms**, and **Performance**.
+    
+    **WHEN USEFUL**: 
+    - First-time setup (Index Initialization).
+    - Deploying to a multi-node cluster (Horizontal Scaling).
 
-    2. REPLICATION (High Availability):
-       - number_of_replicas: 2. Each of the 3 shards has 2 copies.
-       - Total physical shards = 3 * (1 + 2) = 9.
-       - Why: Protects against server failure and speeds up read queries.
-
-    3. ANALYSIS PIPELINE (Synonyms):
-       - Pipeline: Standard Tokenizer -> Lowercase Filter -> Synonym Filter.
-       - Example: "T-Shirt" becomes ["t-shirt", "tshirt", "tee"].
-       - Why: Ensures users find what they need even if they use different words.
+    **FEATURES**:
+    1. **SHARDING**: Splits data across 2 nodes (2 Shards) for parallel searching.
+    2. **REPLICATION**: Creates 1 copy (1 Replica) of data for fault tolerance.
+    3. **ANALYZERS**: Custom pipeline mapping "perfume" -> "fragrance" at ingestion.
     """
     index_name = settings.ELASTICSEARCH_INDEX
 
     if es_client.indices.exists(index=index_name):
-        logger.info("Elasticsearch index '%s' already exists", index_name)
+        logger.info("SYSTEM | Index '%s' exists. Ready.", index_name)
         return
 
     synonyms = _load_synonyms()
 
     mapping = {
         "settings": {
-            "number_of_shards": 1,
-            "number_of_replicas": 0,
+            "number_of_shards": 2,
+            "number_of_replicas": 1,
 
             "analysis": {
                 "filter": {

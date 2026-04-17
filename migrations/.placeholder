@@ -1,0 +1,2 @@
+This folder is reserved for future database migrations using Alembic.
+Please refer to the README.md for instructions on how to initialize and use migrations.

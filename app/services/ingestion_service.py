@@ -23,6 +23,21 @@ def parse_iso_datetime(date_str: str) -> datetime | None:
 class IngestionService:
     @staticmethod
     def fetch_products_from_source() -> list[dict]:
+        """
+        ### 📥 REMOTE DATA EXTRACTION
+        Fetches product data from the external DummyJSON API using paginated batches.
+
+        **WHY**: To populate our initial 'Source of Truth' database with real-world data. 
+                 It uses **Retries** and **Batching** to ensure resilience.
+        
+        **WHEN USEFUL**: 
+        - Initial application boot (Cold Start).
+        - Periodic synchronization with external vendors.
+
+        **SCALING**: Uses a `limit=100` batch size to avoid memory overflow during large extractions.
+        
+        **EXAMPLE**: `skip=0, limit=100` -> `skip=100, limit=100` until nothing left.
+        """
         import time
         all_products = []
         limit = 100
@@ -36,7 +51,7 @@ class IngestionService:
             
             for attempt in range(3):
                 try:
-                    logger.info(f"Fetching batch from {url} (Attempt {attempt + 1}/3)")
+                    logger.info(f"FETCHING | Batch from {url} (Attempt {attempt + 1}/3)")
                     response = requests.get(url, timeout=30)
                     response.raise_for_status()
                     data = response.json()
@@ -44,24 +59,38 @@ class IngestionService:
                     success = True
                     break
                 except requests.RequestException as e:
-                    logger.warning(f"Error fetching batch at skip {skip}: {e}. Retrying...")
+                    logger.warning(f"FETCH ERROR | Skip {skip}: {e}. Retrying...")
                     time.sleep(1)
             
             if success:
-                logger.info(f"Successfully fetched {len(batch)} products in this batch")
+                logger.info(f"FETCH SUCCESS | Received {len(batch)} items")
                 all_products.extend(batch)
                 if len(batch) < limit:
                     break
             else:
-                logger.error(f"Failed to fetch batch at skip {skip} after 3 attempts. Continuing.")
+                logger.error(f"FETCH FATAL | Failed at skip {skip} after 3 attempts.")
             
             skip += limit
 
-        logger.info(f"Total products fetched across all batches: {len(all_products)}")
+        logger.info(f"FETCH COMPLETE | Total items retrieved: {len(all_products)}")
         return all_products
 
     @staticmethod
     def bootstrap_data(db: Session) -> None:
+        """
+        ### 🚀 DATA BOOTSTRAPPING (ORCHESTRATOR)
+        Ensures both MySQL and Elasticsearch are populated and in-sync.
+
+        **WHY**: Guarantees that the app is ready for users immediately after startup.
+                 It is **Idempotent** (won't duplicate data if run twice).
+        
+        **WHEN USEFUL**: 
+        - `docker-compose up` on a fresh system.
+        - Recovering from an Elasticsearch index deletion.
+
+        **EXAMPLE**: If MySQL has 194 items but ES has 0 -> Runs `index_all_from_db`.
+        """
+        logger.info("BOOTSTRAP | Checking system health...")
         product_count = db.scalar(select(func.count()).select_from(Product)) or 0
         create_products_index()
 

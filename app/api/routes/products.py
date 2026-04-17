@@ -45,7 +45,8 @@ async def list_or_search_products(
         )
         return result
 
-    result = ProductService.get_products(
+    # Standard listing via MySQL (with Redis Caching)
+    result = await ProductService.get_products(
         db=db,
         page=page,
         size=size,
